@@ -1,7 +1,7 @@
 # ⚡ Merit Order Game
 
 A browser-based classroom game for teaching how the electricity market and the merit order work.
-Each student (or team) starts with money, **buys a fleet of power plants**, and bids its electricity into a
+Students play in **companies**, one laptop per company. Each company starts with money, **buys power plants**, and bids their electricity into a
 day-ahead market, round after round. Plants stay in the fleet, and more can be bought every round.
 After each round the projector shows the merit-order curve, the clearing price and a leaderboard.
 At the end, a debrief shows whether bidding above marginal cost paid off.
@@ -20,7 +20,7 @@ python -m http.server 8000
 ```
 
 Open <http://localhost:8000/host.html>, create a game, then open the join link in 3–4 more tabs
-(each tab is a separate player). ES modules don't load from `file://`, so you need the local server.
+(each tab is a separate company). ES modules don't load from `file://`, so you need the local server.
 
 ## Classroom setup (one-off, about 10 minutes)
 
@@ -52,9 +52,9 @@ The game uses three screens:
 
 | Page | Who sees it | What it shows |
 |---|---|---|
-| `host.html` | **you only** (laptop) | Controls, plus a private monitor: every team's fleet, cash, net worth, live bids with mark-ups, and who owns what |
+| `host.html` | **you only** (laptop) | Controls, plus a private monitor: every company's fleet, cash, net worth, live bids with mark-ups, and who owns what |
 | `screen.html` | **the class** (projector) | Join code and QR, shop, demand outlook, phase and timer, who has bought or bid, results and leaderboard. No private data. Open it with the **📽️ Open projector screen** button. |
-| `play.html` | students (phones) | Shop, own fleet, bid form, own results and history |
+| `play.html` | each company (one laptop) | Shop, fleet, bid form with cost calculator, results with feedback, history |
 
 Each round has three steps:
 
@@ -74,10 +74,11 @@ Students who reload keep their identity (it is stored per browser tab).
 
 | Setting | Default | Notes |
 |---|---|---|
-| Who plays | Teams | Define team names; students pick their team on join. Teammates share cash and fleet, and any member can buy or bid. Or: individual play. |
-| Starting money | €50M | Per team / player. |
+| Starting money | €50M | Per company. |
+| Max plants | 3 | Per company, keeps the screens tidy. 0 = no limit. |
+| AI companies | 0 | Computer players to fill the market (see below). More can be added at any time. |
 | Rounds | 5 | |
-| Demand per team | 400, 500, 600, 650, 700 MW | Multiplied by the number of active teams. Growing demand forces new investment. |
+| Demand per company | 300, 350, 400, 450, 500 MW | Multiplied by the number of companies (AI included). Growing demand forces new investment. |
 | Hours per round | 1,000 | Each round represents this many hours with the same conditions. Profits = MW × €/MWh × hours. |
 | Forecast error | ± 4 % | Actual demand is drawn when the market clears, so bidding very high risks being left out. |
 | Price cap | 500 €/MWh | Paid to everyone if supply can't cover demand (scarcity). |
@@ -86,24 +87,42 @@ Students who reload keep their identity (it is stored per browser tab).
 | Plant value at the end | 50 % | Net worth = cash + plants at this % of purchase price. Lower values punish late over-investment. |
 | Timers | 120 s shop, 90 s bidding | 0 = you advance manually. |
 | Show owners | Yes | Whether the public merit-order chart shows who owns each bar. |
-| Shop | see below | Per technology: on/off, unit size, marginal cost, price, availability range. |
+| CO₂ price | 30 €/t | Enters every fossil plant's marginal cost. Raise it in a second game to watch coal and gas swap places. |
+| Shop | see below | Per technology: on/off, unit size, price, fuel price, efficiency, CO₂ factor, variable O&M, availability range. The marginal cost is computed from these. |
 
 Default shop (stylised so a plant pays back in about 2–4 rounds):
 
-| Technology | Unit | Marginal cost | Price | Availability |
-|---|---|---|---|---|
-| Solar PV | 100 MW | 0 €/MWh | €8M | 15–70 % (weather) |
-| Wind | 150 MW | 0 €/MWh | €15M | 20–90 % (weather) |
-| Nuclear | 500 MW | 10 €/MWh | €85M | 100 % |
-| Lignite | 400 MW | 30 €/MWh | €42M | 100 % |
-| Hard coal | 300 MW | 45 €/MWh | €18M | 100 % |
-| Gas CCGT | 250 MW | 65 €/MWh | €7M | 100 % |
-| Gas OCGT | 100 MW | 110 €/MWh | €2M | 100 % |
-| Oil | 50 MW | 160 €/MWh | €0.6M | 100 % |
+| Technology | Unit | Price | Fuel (€/MWh<sub>th</sub>) | Efficiency | CO₂ (t/MWh<sub>th</sub>) | Var. O&M | Marginal cost at 30 €/t | Availability |
+|---|---|---|---|---|---|---|---|---|
+| Solar PV | 100 MW | €8M | 0 | – | 0 | 0 | 0 €/MWh | 15–70 % (weather) |
+| Wind | 150 MW | €15M | 0 | – | 0 | 0 | 0 €/MWh | 20–90 % (weather) |
+| Nuclear | 500 MW | €85M | 3.3 | 33 % | 0 | 0 | 10 €/MWh | 100 % |
+| Lignite | 400 MW | €36M | 4 | 40 % | 0.36 | 1 | 38 €/MWh | 100 % |
+| Hard coal | 300 MW | €18M | 9 | 42 % | 0.34 | 2 | 47.7 €/MWh | 100 % |
+| Gas CCGT | 250 MW | €7M | 33 | 58 % | 0.20 | 0 | 67.2 €/MWh | 100 % |
+| Gas OCGT | 100 MW | €2M | 33 | 38 % | 0.20 | 3 | 105.6 €/MWh | 100 % |
+| Oil | 50 MW | €0.6M | 45 | 35 % | 0.27 | 5 | 156.7 €/MWh | 100 % |
 
-Nuclear costs more than the starting budget, so a team can only afford it after earning profits. That's deliberate.
+Marginal cost = fuel ÷ efficiency + CO₂ price × CO₂ factor ÷ efficiency + variable O&M.
+Nuclear costs more than the starting budget, so a company can only afford it after earning profits. That's deliberate.
 
-If two teammates buy at the same moment and overspend, the latest purchases are undone when the shop closes.
+If a company somehow overspends or exceeds the plant limit (e.g. two quick clicks), its latest purchases are undone when the shop closes.
+
+### AI companies
+
+If there aren't enough students, add computer players: set **AI companies** when creating the game, or use
+**+ Add AI company** on `host.html`. AI companies run in the host's browser (keep `host.html` open), appear with 🤖 in all
+tables, and can't be joined by students. Each round they:
+
+* **Buy** plants as soon as the shop opens, until their share of the demand forecast (+10%) is covered, within their cash
+  and the plant limit. They pick the technology with the best expected operating profit per euro invested at the last
+  clearing price (70 €/MWh in round 1), with a bit of randomness. That's a simple screening-curve rule.
+* **Bid** as soon as bidding opens, according to their strategy (changeable any time on `host.html`):
+  * **Competitive:** bids exactly its marginal cost (the textbook benchmark).
+  * **Mark-up:** bids 20–60% above cost.
+  * **Random:** bids between 80% and 200% of cost.
+
+The logic is in [js/ai.js](js/ai.js). Comparing the students with a competitive AI company makes a good debrief point.
 
 ### Market rules (as students see them)
 
@@ -113,6 +132,31 @@ If two teammates buy at the same moment and overspend, the latest purchases are 
 * **Pay-as-clear:** every accepted plant gets the clearing price (the bid of the last accepted offer).
 * Operating profit = (price received − marginal cost) × MWh dispatched.
 * Ranking by **net worth** = cash + plants valued at the end-value %.
+
+## Learning tools
+
+The game is built so students *discover* that bidding marginal cost is the safe choice:
+
+* **🧮 Cost calculator** (shop, bid form, Market and History tabs) for any plant:
+  1. the **marginal cost breakdown**: fuel ÷ efficiency + CO₂ price × emission factor ÷ efficiency + variable O&M;
+  2. the **LCOE** within the game: marginal cost + investment × (1 − end value) ÷ (MW × running hours × rounds),
+     with adjustable rounds and running hours (try a peaker at 10 % running hours);
+  3. a **bid simulator**: "if the clearing price is P and I bid B, what do I earn?" It shows that under pay-as-clear the price
+     you receive doesn't depend on your bid, and a bid above the price means €0. "Use this bid" copies the value into the form;
+  4. a **sunk-cost note**: the investment doesn't matter for bidding, only for buying.
+* **Feedback after each round** for each company: "If you had bid your marginal costs you would have earned €X (you earned €Y)",
+  plus a note for each plant: not dispatched although cheaper than the price, produced at a loss, set the price with a mark-up (risky),
+  correctly stayed off, or earned the full margin.
+* **Key concepts** glossary in the Rules tab: merit order, marginal cost, clearing price, inframarginal rent,
+  merit-order effect, scarcity, LCOE, sunk cost.
+* **🔬 What-if explorer** on `host.html` for any cleared round, with **📽️ Show on projector**. It re-clears the round with the same plants:
+  * **Everyone bids marginal cost**: the competitive benchmark;
+  * **No renewables** and **Renewable boom (×3)**: the merit-order effect, and who wins or loses from renewables;
+  * **Scarcity (+30% demand)**: demand not covered, price at the cap;
+  * or any combination of bids (as played / marginal cost), wind & solar (0, ×0.5, ×1, ×2, ×3) and demand (−30% … +50%).
+
+  It shows the scenario's merit order, clearing price, unserved demand, renewable share, total producer profit,
+  what consumers pay, and each company's profit next to the actual result.
 
 ## Debrief ideas
 
@@ -150,10 +194,12 @@ That makes a nice exercise: give students the CSV and ask them to write the clea
 | File | Purpose |
 |---|---|
 | `index.html` | Landing page: join with a code, or host |
-| `host.html`, `js/host.js` | Instructor: setup, phase control, market clearing, private team monitor |
+| `host.html`, `js/host.js` | Instructor: setup, phase control, market clearing, private company monitor |
 | `screen.html`, `js/screen.js` | Projector view (public information only) |
 | `play.html`, `js/play.js` | Student view: shop, fleet, bidding, own results |
 | `js/market.js` | Technology catalogue, availability draw, **market clearing** (pure functions) |
+| `js/ai.js` | Computer-controlled companies: investment and bidding rules |
+| `js/scenarios.js` | What-if re-clearing (competitive, renewables, demand) and the per-company "bid marginal cost" check |
 | `js/views.js`, `js/charts.js`, `js/ui.js` | Shared HTML blocks, SVG charts, helpers (finances, CSV export) |
 | `js/store.js`, `js/config.js` | Firebase / local-storage sync layer and its configuration |
 | `js/loadguard.js` | Shows a message if the app fails to load |

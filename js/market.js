@@ -16,21 +16,48 @@ export const TECH = {
 export const TECH_ORDER = ['solar', 'wind', 'nuclear', 'lignite', 'coal', 'ccgt', 'ocgt', 'oil'];
 
 /**
- * What players can buy. Per unit: size (MW), marginal cost (€/MWh),
- * investment cost (€) and availability range: the share of capacity that can
- * produce in a round (wind and solar depend on the weather, drawn each round).
- * Costs are stylised so a plant pays back in roughly 2–4 rounds of 1,000 hours.
+ * What companies can buy. Per unit:
+ *   unit  : size (MW)
+ *   cost  : investment cost (€), stylised so a plant pays back in roughly 2–4 rounds of 1,000 hours
+ *   avail : share of capacity that can produce in a round (wind and solar depend on the weather, drawn each round)
+ *   fuel  : fuel price (€ per MWh of fuel, i.e. thermal)
+ *   eff   : electrical efficiency (MWh electricity per MWh fuel)
+ *   ef    : emission factor of the fuel (t CO2 per MWh of fuel)
+ *   vom   : variable operation & maintenance cost (€/MWh electricity)
+ * The marginal cost follows from these and the game's CO2 price (see marginalCost).
  */
 export const DEFAULT_CATALOGUE = {
-  solar:   { unit: 100, mc: 0,   cost: 8e6,  avail: [0.15, 0.7] },
-  wind:    { unit: 150, mc: 0,   cost: 15e6, avail: [0.2, 0.9] },
-  nuclear: { unit: 500, mc: 10,  cost: 85e6, avail: [1, 1] },
-  lignite: { unit: 400, mc: 30,  cost: 42e6, avail: [1, 1] },
-  coal:    { unit: 300, mc: 45,  cost: 18e6, avail: [1, 1] },
-  ccgt:    { unit: 250, mc: 65,  cost: 7e6,  avail: [1, 1] },
-  ocgt:    { unit: 100, mc: 110, cost: 2e6,  avail: [1, 1] },
-  oil:     { unit: 50,  mc: 160, cost: 0.6e6, avail: [1, 1] },
+  solar:   { unit: 100, cost: 8e6,   avail: [0.15, 0.7], fuel: 0,   eff: 1,    ef: 0,    vom: 0 },
+  wind:    { unit: 150, cost: 15e6,  avail: [0.2, 0.9],  fuel: 0,   eff: 1,    ef: 0,    vom: 0 },
+  nuclear: { unit: 500, cost: 85e6,  avail: [1, 1],      fuel: 3.3, eff: 0.33, ef: 0,    vom: 0 },
+  lignite: { unit: 400, cost: 36e6,  avail: [1, 1],      fuel: 4,   eff: 0.40, ef: 0.36, vom: 1 },
+  coal:    { unit: 300, cost: 18e6,  avail: [1, 1],      fuel: 9,   eff: 0.42, ef: 0.34, vom: 2 },
+  ccgt:    { unit: 250, cost: 7e6,   avail: [1, 1],      fuel: 33,  eff: 0.58, ef: 0.20, vom: 0 },
+  ocgt:    { unit: 100, cost: 2e6,   avail: [1, 1],      fuel: 33,  eff: 0.38, ef: 0.20, vom: 3 },
+  oil:     { unit: 50,  cost: 0.6e6, avail: [1, 1],      fuel: 45,  eff: 0.35, ef: 0.27, vom: 5 },
 };
+export const DEFAULT_CO2_PRICE = 30; // €/t
+
+/** Marginal cost breakdown in €/MWh of electricity. */
+export function mcBreakdown(k, co2Price) {
+  const fuel = k.eff > 0 ? (k.fuel || 0) / k.eff : 0;
+  const co2 = k.eff > 0 ? ((k.ef || 0) * co2Price) / k.eff : 0;
+  const vom = k.vom || 0;
+  return { fuel, co2, vom, total: Math.round((fuel + co2 + vom) * 10) / 10 };
+}
+export const marginalCost = (k, co2Price) => mcBreakdown(k, co2Price).total;
+
+/**
+ * Levelised cost of electricity within the game: marginal cost plus the investment
+ * (minus what the plant is still worth at the end) spread over the energy the
+ * plant could produce in the remaining rounds if it ran all the time.
+ */
+export function gameLcoe(k, { mc, rounds, hours, salvage }) {
+  const avail = ((k.avail?.[0] ?? 1) + (k.avail?.[1] ?? 1)) / 2;
+  const energy = k.unit * avail * hours * Math.max(1, rounds);
+  const capital = (k.cost * (1 - salvage / 100)) / energy;
+  return { capital, energy, avail, total: mc + capital };
+}
 
 /** Draw this round's availability for every technology with a variable output. */
 export function drawAvailability(catalogue, rand = Math.random) {

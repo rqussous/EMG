@@ -50,22 +50,22 @@ export function cleared(game) {
   return out;
 }
 
-/** Players (individual mode) or teams with at least one member or plant. */
+/** All companies in the game (students' and AI). */
 export function owners(game) {
-  const ids = Object.keys(game.participants || {});
-  if (game.config.mode !== 'team') return ids;
-  const active = new Set([...values(game.members).map((m) => m.team), ...values(game.plants).map((p) => p.owner)]);
-  return ids.filter((id) => active.has(id));
+  return Object.keys(game.participants || {});
 }
 
-/** Demand forecast (MW) for round r given the current number of players/teams. */
+/** Maximum number of plants per company (0 or missing = unlimited). */
+export const maxPlants = (game) => game.config.maxPlants || Infinity;
+
+/** Demand forecast (MW) for round r given the current number of companies. */
 export function defaultDemand(game, r) {
   const per = game.config.demandPerOwner;
   return Math.round((per[r - 1] ?? per[per.length - 1]) * Math.max(1, owners(game).length));
 }
 
 /**
- * Money per player/team, sorted by net worth.
+ * Money per company, sorted by net worth.
  * cash      = starting budget − investments + operating profits
  * net worth = cash + plants valued at `salvage` % of their purchase price
  */
@@ -113,8 +113,7 @@ export function fleetChips(plants) {
 
 export function leaderboardTable(game, highlight) {
   const list = finances(game);
-  const team = game.config.mode === 'team';
-  return `<table class="tbl"><thead><tr><th>#</th><th>${team ? 'Team' : 'Player'}</th><th class="n">Capacity</th>
+  return `<table class="tbl"><thead><tr><th>#</th><th>Company</th><th class="n">Capacity</th>
     <th class="n">Invested</th><th class="n">Operating profit</th><th class="n">Cash</th><th class="n">Net worth</th></tr></thead><tbody>
     ${list.map((r) => `<tr class="${r.id === highlight ? 'me' : ''}"><td>${r.rank}</td><td>${esc(r.name)}</td>
       <td class="n">${num(r.fleetMW)} MW</td><td class="n">${eur(r.invested)}</td>

@@ -1,8 +1,8 @@
-// Projector view: read-only, shows only information every player may see.
+// Projector view: read-only, shows only information every company may see.
 import { getStore } from './store.js';
 import { $, esc, num, eur, roundKey, leaderboardTable, attachTooltips, finances, cleared, countdown, outdatedGameMessage } from './ui.js';
 import {
-  PHASE_LABEL, joinCard, lobbyList, catalogueTable, demandOutlook, marketMix, availabilityKpis, resultsCard, capacityMixCard, debriefView,
+  PHASE_LABEL, joinCard, lobbyList, catalogueTable, demandOutlook, marketMix, availabilityKpis, resultsCard, capacityMixCard, debriefView, whatIfView,
 } from './views.js';
 
 const store = await getStore();
@@ -42,7 +42,7 @@ function render() {
 
   if (phase === 'lobby') {
     parts.push(lobbyList(game));
-    parts.push(`<div class="card"><h2>The power plant shop</h2><p>Every ${c.mode === 'team' ? 'team' : 'player'} starts with
+    parts.push(`<div class="card"><h2>The power plant shop</h2><p>Every company starts with
       <b>${esc(eur(c.budget))}</b>. Each round you can buy plants, then bid their electricity into the market. One round = ${num(c.hours)} hours.</p>
       ${catalogueTable(game)}</div>`);
     parts.push(`<div class="card"><h3>Demand outlook</h3>${demandOutlook(game)}</div>`);
@@ -67,6 +67,8 @@ function render() {
   if (phase === 'results' || phase === 'finished') {
     const r = phase === 'results' ? round : cleared(game).slice(-1)[0];
     if (phase === 'finished') parts.push(`<div class="card"><h1>🏆 Final ranking</h1>${podium(fin)}</div>`);
+    const wi = game.meta.whatif;
+    if (wi && game.rounds?.[roundKey(wi.round)]?.result) parts.push(whatIfView(game, wi.round, wi, { showNames: c.showNames }));
     if (r) parts.push(resultsCard(game, r, { showNames: c.showNames }));
     parts.push(`<div class="card"><h2>Leaderboard</h2><div class="scroll">${leaderboardTable(game)}</div></div>`);
     if (phase === 'finished') {

@@ -1,12 +1,13 @@
-// HTML building blocks shared by the host, projector and player pages.
+// HTML building blocks shared by the host, projector and company (player) pages.
 import { TECH, TECH_ORDER } from './market.js';
 import { meritOrderChart, markupProfitChart, markupByRoundChart, capacityMixChart } from './charts.js';
+import { runScenario, RENEWABLES } from './scenarios.js';
 import {
   esc, num, eur, price, roundKey, values, ownerName, techBadge, cleared, defaultDemand, capacityByTech, finances,
 } from './ui.js';
 
 export const PHASE_LABEL = {
-  lobby: 'Lobby: players joining',
+  lobby: 'Lobby: companies joining',
   invest: 'Investment',
   bidding: 'Bidding',
   results: 'Results',
@@ -25,7 +26,7 @@ export function qrSvg(url) {
 
 export function joinCard(game, big = true) {
   const url = joinUrl(game.code);
-  const n = Object.keys(game.config.mode === 'team' ? game.members || {} : game.participants || {}).length;
+  const n = Object.values(game.participants || {}).filter((p) => !p.ai).length;
   if (!big) return `<p class="muted small">Join: <a href="${esc(url)}" target="_blank">${esc(url)}</a> · code <b>${esc(game.code)}</b> · ${n} joined</p>`;
   return `<div class="card row" style="justify-content:space-between">
     <div><h3>Join on your phone or laptop</h3><div class="code">${esc(game.code)}</div>
@@ -34,15 +35,10 @@ export function joinCard(game, big = true) {
 }
 
 export function lobbyList(game) {
-  if (game.config.mode === 'team') {
-    const byTeam = {};
-    values(game.members).forEach((m) => (byTeam[m.team] ||= []).push(m.name));
-    return `<div class="card"><h2>Teams</h2><table class="tbl"><tbody>${Object.entries(game.participants || {}).map(([id, t]) =>
-      `<tr><td class="strong">${esc(t.name)}</td><td><div class="members">${(byTeam[id] || []).map((n) => `<span>${esc(n)}</span>`).join('') || '<span class="muted">no members yet</span>'}</div></td></tr>`).join('')}
-      </tbody></table></div>`;
-  }
-  const names = values(game.participants).map((p) => p.name);
-  return `<div class="card"><h2>Players (${names.length})</h2><div class="members">${names.map((n) => `<span>${esc(n)}</span>`).join('') || '<span class="muted">Waiting for players…</span>'}</div></div>`;
+  const list = values(game.participants);
+  return `<div class="card"><h2>Companies (${list.length})</h2>${list.length ? `<table class="tbl"><tbody>${list.map((p) =>
+    `<tr><td class="strong">${esc(p.name)}</td><td class="muted">${p.ai ? 'computer player' : esc(p.members || '')}</td></tr>`).join('')}</tbody></table>`
+    : '<p class="muted">Waiting for companies to join…</p>'}</div>`;
 }
 
 /** The shop catalogue as a read-only table. */
@@ -58,7 +54,7 @@ export function catalogueTable(game) {
     }).join('')}</tbody></table></div>`;
 }
 
-/** Demand forecast for all rounds, based on the current number of players/teams. */
+/** Demand forecast for all rounds, based on the current number of companies. */
 export function demandOutlook(game) {
   const c = game.config;
   const cells = [];
@@ -136,7 +132,44 @@ export function debriefView(game) {
   const fin = Object.fromEntries(finances(game).map((f) => [f.id, f]));
   const points = Object.entries(per).filter(([id]) => fin[id]).map(([id, p]) => ({ id, name: fin[id].name, markup: p.s / p.w, profit: fin[id].opProfit }));
   return `<div class="grid2">
-    <div class="card"><h2>Did bidding above cost pay off?</h2><p class="muted small">One dot per ${game.config.mode === 'team' ? 'team' : 'player'}: capacity-weighted mark-up over all rounds vs. total operating profit.</p>${markupProfitChart(points)}</div>
+    <div class="card"><h2>Did bidding above cost pay off?</h2><p class="muted small">One dot per company: capacity-weighted mark-up over all rounds vs. total operating profit.</p>${markupProfitChart(points)}</div>
     <div class="card"><h2>Mark-up over the rounds</h2><p class="muted small">Median of (bid − marginal cost) across all submitted offers.</p>${markupByRoundChart(rounds)}</div>
   </div>`;
+}
+
+/**
+ * "What if" comparison for cleared round r: the scenario's merit order, price and
+ * each company's profit next to what actually happened.
+ * params: { bids: 'played'|'mc', renew: multiplier, demand: multiplier }
+ */
+export function whatIfView(game, r, params, { showNames = true } = {}) {
+  const rd = game.rounds[roundKey(r)];
+  const actual = rd.result;
+  const sc = runScenario(game, r, params);
+  const names = Object.fromEntries(Object.keys(game.participants || {}).map((id) => [id, ownerName(game, id)]));
+  const ren = (res) => (res.offers || []).filter((o) => RENEWABLES.includes(o.tech)).reduce((s, o) => s + o.dispatched, 0);
+  const share = (res) => (res.demand ? Math.round((ren(res) / res.demand) * 100) : 0);
+  const desc = [
+    params.bids === 'mc' ? 'everyone bids marginal cost' : 'bids as played',
+    params.renew === 1 ? 'renewables as built' : params.renew === 0 ? 'no wind & solar' : `wind & solar ×${params.renew}`,
+    params.demand === 1 ? 'actual demand' : `demand ${params.demand > 1 ? '+' : ''}${Math.round((params.demand - 1) * 100)}%`,
+  ].join(' · ');
+  const ids = Object.keys(game.participants || {});
+  const rows = ids.map((id) => ({ id, name: names[id], a: actual.perOwner?.[id]?.profit ?? 0, s: sc.perOwner?.[id]?.profit ?? 0 }))
+    .sort((x, y) => y.s - x.s);
+  const delta = (d) => `<span class="${d < 0 ? 'neg' : d > 0 ? 'pos' : ''}">${d > 0 ? '+' : ''}${eur(d)}</span>`;
+  const sum = (res) => Object.values(res.perOwner || {}).reduce((s, v) => s + v.profit, 0);
+  const consumerCost = (res) => res.price * res.demand * (res.hours ?? 1);
+  return `<div class="card"><h2>What if? Round ${r}: ${esc(desc)}</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="v">${price(sc.price)}</div><div class="k">clearing price (actual ${price(actual.price)})</div></div>
+      <div class="kpi"><div class="v ${sc.unserved > 0 ? 'neg' : ''}">${num(sc.unserved)} MW</div><div class="k">unserved demand${sc.unserved > 0 ? ' → price cap' : ''}</div></div>
+      <div class="kpi"><div class="v">${share(sc)}%</div><div class="k">of demand from wind &amp; solar (actual ${share(actual)}%)</div></div>
+      <div class="kpi"><div class="v">${eur(sum(sc))}</div><div class="k">total producer profit (actual ${eur(sum(actual))})</div></div>
+      <div class="kpi"><div class="v">${eur(consumerCost(sc))}</div><div class="k">consumers pay (actual ${eur(consumerCost(actual))})</div></div>
+    </div>
+    <div style="margin-top:1rem">${meritOrderChart(sc, { names, showNames })}</div>
+      <div class="scroll" style="margin-top:.75rem"><table class="tbl"><thead><tr><th>Company</th><th class="n">Actual profit</th><th class="n">What-if profit</th><th class="n">Difference</th></tr></thead><tbody>
+        ${rows.map((x) => `<tr><td>${esc(x.name)}</td><td class="n">${eur(x.a)}</td><td class="n strong">${eur(x.s)}</td><td class="n">${delta(x.s - x.a)}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
 }

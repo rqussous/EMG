@@ -203,6 +203,7 @@ body.app header.top .brand { font-size: 1rem; }
 .panel { background: #fff; padding: .7rem .8rem; margin-bottom: .6rem; border-top: 3px solid var(--blue); }
 .cols { display: grid; gap: .6rem; }
 @media (min-width: 820px) { .cols { grid-template-columns: 3fr 2fr; align-items: start; } }
+@media (max-width: 819px) { .cols .first-on-phone { order: -1; } }
 .tabs { flex: none; display: grid; grid-template-columns: repeat(5, 1fr); background: #fff; border-top: 1px solid var(--line); }
 .tabs button { background: #fff; color: var(--ink-2); padding: .45rem .2rem .5rem; font-size: .72rem; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: .1rem; border-top: 3px solid transparent; }
 .tabs button span { font-size: 1.15rem; line-height: 1; }
@@ -242,3 +243,21 @@ body.app header.top .brand { font-size: 1rem; }
   .kpi { min-width: 120px; flex: 1; }
   .hero h1 { font-size: 2rem; }
 }
+
+/* learning aids: calculator modal, feedback, glossary */
+#modal { position: fixed; inset: 0; background: rgba(0, 0, 74, .45); display: none; align-items: flex-start; justify-content: center; z-index: 70; padding: 1rem; overflow-y: auto; }
+.modal-box { background: #fff; border-top: 4px solid var(--blue); max-width: 640px; width: 100%; padding: 1rem 1.1rem; }
+.modal-box h3 { margin: 0 0 .35rem; color: var(--dblue); }
+label.inl { display: inline-flex; align-items: center; gap: .4rem; font-weight: 400; margin: 0; }
+label.inl input { width: 6.5rem; padding: .3rem .4rem; }
+#lc-out, #sim-out { margin-top: .4rem; line-height: 1.5; }
+.lesson { background: var(--yellow-20); border-left: 4px solid var(--yellow); padding: .45rem .6rem; margin: .5rem 0; font-size: .85rem; }
+.lessons { list-style: none; padding: 0; margin: .3rem 0 0; font-size: .82rem; }
+.lessons li { padding: .35rem 0; border-bottom: 1px solid var(--line); }
+.lessons li span { color: var(--ink-2); }
+.linkbtn { background: none; color: var(--blue); padding: 0 .2rem; font-size: .95rem; }
+.linkbtn:hover { background: var(--blue-20); }
+.calc-btn { padding: .25rem .45rem !important; }
+.glossary { margin: .2rem 0; font-size: .88rem; }
+.glossary dt { font-weight: 600; color: var(--dblue); margin-top: .5rem; }
+.glossary dd { margin: .1rem 0 0; }
