@@ -1,16 +1,17 @@
 # ⚡ Merit Order Game
 
 A browser-based classroom game for teaching how the electricity market and the merit order work.
-Each student (or team) owns one or more power plants and bids into a day-ahead market, round after round.
-The host's screen shows the merit-order curve, the clearing price and a leaderboard after each round,
-and at the end a debrief showing whether bidding above marginal cost paid off.
+Each student (or team) starts with money, **buys a fleet of power plants**, and bids its electricity into a
+day-ahead market, round after round. Plants stay in the fleet, and more can be bought every round.
+After each round the projector shows the merit-order curve, the clearing price and a leaderboard.
+At the end, a debrief shows whether bidding above marginal cost paid off.
 
 It is a static website (HTML + JavaScript, no build step), so it runs on **GitHub Pages**.
-Real-time sync between the students' phones and the projector goes through a free **Firebase Realtime Database**.
+Real-time sync between the students' phones and the instructor's screens goes through a free **Firebase Realtime Database**.
 
 ## Quick start: try it locally (no setup)
 
-With `js/config.js` left as is (`firebaseConfig = null`), the game runs in **local demo mode**:
+With `firebaseConfig = null` in `js/config.js`, the game runs in **local demo mode**:
 data lives in your browser's localStorage and syncs between tabs of the same browser.
 
 ```bash
@@ -47,14 +48,24 @@ Any other static host (your university web space, Netlify, …) works the same w
 
 ## Running the game in class
 
-1. Open `…/host.html` on the projector → configure → **Create game**.
-2. Students scan the QR code (or go to the site and type the 4-letter code) and enter their name / pick their team.
-3. **Start game: assign plants.** Every student sees their plant: technology, capacity and marginal cost.
-4. **Open bidding** for round 1. Students submit an offer price (€/MWh) for each of their plants.
-   They can change it until bidding closes (by the timer or by you).
-5. **Close bidding & clear market.** Everyone sees the merit order, the clearing price and their profit.
-6. Repeat. You can adjust the demand level before each round.
-7. **Finish game** → final leaderboard, debrief charts, and **Download results (CSV)** for the Python part of the lecture.
+The game uses three screens:
+
+| Page | Who sees it | What it shows |
+|---|---|---|
+| `host.html` | **you only** (laptop) | Controls, plus a private monitor: every team's fleet, cash, net worth, live bids with mark-ups, and who owns what |
+| `screen.html` | **the class** (projector) | Join code and QR, shop, demand outlook, phase and timer, who has bought or bid, results and leaderboard. No private data. Open it with the **📽️ Open projector screen** button. |
+| `play.html` | students (phones) | Shop, own fleet, bid form, own results and history |
+
+Each round has three steps:
+
+1. **💰 Investment.** The shop is open. Students buy plants with their cash. Plants bought this round can be
+   returned for a full refund until the shop closes.
+2. **📈 Bidding.** Wind and solar availability for the round is revealed. Students submit an offer price (€/MWh) per plant.
+3. **📊 Results.** The market clears. Everyone sees the merit order, the clearing price and their profit.
+
+Flow: create the game in `host.html` → students join → **Start game: open the shop for round 1** →
+**Close shop & open bidding** → **Close bidding & clear market** → **Open the shop for round 2** → … → **Finish game**.
+With timers set, the phases advance automatically (keep `host.html` open). Before each round you can override the demand forecast.
 
 If the host tab is closed or reloaded, open `host.html` again and click **Resume**: all state is in the database.
 Students who reload keep their identity (it is stored per browser tab).
@@ -63,42 +74,67 @@ Students who reload keep their identity (it is stored per browser tab).
 
 | Setting | Default | Notes |
 |---|---|---|
-| Who bids | Individually | **Teams:** define team names; students pick their team on join. Teammates share a fleet and any member can submit the team's bid. |
-| Plants per player/team | 1 / 3 | Team fleets are dealt snake-draft by marginal cost, so every team gets a mix of cheap and expensive plants. |
-| Rounds and demand | 5 rounds: 55, 70, 80, 65, 88 % | Demand as a % of installed capacity. High values (>85 %) bring scarcity and market power into play. |
-| Forecast error | ± 4 % | Students see the forecast. Actual demand is drawn when the market clears, so bidding very high risks being left out. |
-| Price cap | 500 €/MWh | Paid to everyone if supply can't cover demand. |
+| Who plays | Teams | Define team names; students pick their team on join. Teammates share cash and fleet, and any member can buy or bid. Or: individual play. |
+| Starting money | €50M | Per team / player. |
+| Rounds | 5 | |
+| Demand per team | 400, 500, 600, 650, 700 MW | Multiplied by the number of active teams. Growing demand forces new investment. |
+| Hours per round | 1,000 | Each round represents this many hours with the same conditions. Profits = MW × €/MWh × hours. |
+| Forecast error | ± 4 % | Actual demand is drawn when the market clears, so bidding very high risks being left out. |
+| Price cap | 500 €/MWh | Paid to everyone if supply can't cover demand (scarcity). |
 | Pricing rule | Pay-as-clear | Switch to **pay-as-bid** in a second game to show how strategies change. |
 | Plants without a bid | Not offered | Alternatives: auto-bid at marginal cost, or at the price cap. |
-| Timer | 90 s | 0 = you close bidding manually. |
-| Show owners | Yes | Whether students see who owns each bar in the merit-order chart. |
+| Plant value at the end | 50 % | Net worth = cash + plants at this % of purchase price. Lower values punish late over-investment. |
+| Timers | 120 s shop, 90 s bidding | 0 = you advance manually. |
+| Show owners | Yes | Whether the public merit-order chart shows who owns each bar. |
+| Shop | see below | Per technology: on/off, unit size, marginal cost, price, availability range. |
+
+Default shop (stylised so a plant pays back in about 2–4 rounds):
+
+| Technology | Unit | Marginal cost | Price | Availability |
+|---|---|---|---|---|
+| Solar PV | 100 MW | 0 €/MWh | €8M | 15–70 % (weather) |
+| Wind | 150 MW | 0 €/MWh | €15M | 20–90 % (weather) |
+| Nuclear | 500 MW | 10 €/MWh | €85M | 100 % |
+| Lignite | 400 MW | 30 €/MWh | €42M | 100 % |
+| Hard coal | 300 MW | 45 €/MWh | €18M | 100 % |
+| Gas CCGT | 250 MW | 65 €/MWh | €7M | 100 % |
+| Gas OCGT | 100 MW | 110 €/MWh | €2M | 100 % |
+| Oil | 50 MW | 160 €/MWh | €0.6M | 100 % |
+
+Nuclear costs more than the starting budget, so a team can only afford it after earning profits. That's deliberate.
+
+If two teammates buy at the same moment and overspend, the latest purchases are undone when the shop closes.
 
 ### Market rules (as students see them)
 
-* Each round is one hour. Demand is inelastic: the forecast ± error.
+* Demand is inelastic: the forecast ± error.
 * Offers are sorted by price (the merit order) and accepted until demand is covered.
   Offers at exactly the marginal price share the remaining demand pro rata.
 * **Pay-as-clear:** every accepted plant gets the clearing price (the bid of the last accepted offer).
-* Profit = (price received − marginal cost) × MWh dispatched.
+* Operating profit = (price received − marginal cost) × MWh dispatched.
+* Ranking by **net worth** = cash + plants valued at the end-value %.
 
 ## Debrief ideas
 
-* **Round 1 typically:** students bid well above cost "to make money". Some expensive offers are not dispatched and
+* **Bidding:** students often bid well above cost "to make money". Some expensive offers are not dispatched and
   earn nothing. Cheap plants that bid high get pushed out by more expensive plants that bid low.
-* **"Did bidding above cost pay off?"** (debrief chart): with pay-as-clear and many small players,
-  bidding your marginal cost is (almost) a dominant strategy. You can never be paid less than your own bid,
-  and you are dispatched exactly when it is profitable. Inframarginal plants earn the difference to the
-  clearing price anyway.
-* **The price-setting plant earns zero.** This gives the "missing money" and scarcity-pricing discussion.
-* **High-demand rounds:** if a few large plants are pivotal, withholding or high bids *can* pay off. This is the
-  door to market power, market monitoring and the price cap.
+  With pay-as-clear and many small players, bidding your marginal cost is (almost) a dominant strategy:
+  inframarginal plants earn the difference to the clearing price anyway (see the "Did bidding above cost pay off?" chart).
+* **The price-setting plant earns zero.** So how does a peaker ever pay back its investment? Only in scarcity hours.
+  This leads to "missing money", scarcity pricing and capacity markets.
+* **Investment:** cheap-to-build, expensive-to-run plants vs. expensive-to-build, cheap-to-run ones
+  (screening curves). Zero-marginal-cost renewables push the price down for everybody (merit-order effect)
+  and earn less the more of them there are (cannibalisation).
+* **Over- and under-investment:** if everyone builds, prices collapse. If nobody builds, demand growth leads to
+  price-cap rounds. Late investments may not pay back before the game ends.
+* **Market power:** with high demand and few large players, withholding or high bids *can* pay off.
 * **Pay-as-bid** (second game): students now try to guess the clearing price. Prices don't fall, they just
   get harder to predict.
 
 ## Using the results in Python
 
-`Download results (CSV)` gives one row per plant per round
-(`round, participant, technology, capacity_mw, marginal_cost_eur_mwh, bid_eur_mwh, dispatched_mw, clearing_price_eur_mwh, profit_eur, …`).
+`Download results (CSV)` (on `host.html` after the game) gives one row per plant per round
+(`round, participant, technology, round_built, investment_cost_eur, capacity_mw, available_mw, marginal_cost_eur_mwh, bid_eur_mwh, dispatched_mw, clearing_price_eur_mwh, profit_eur, …`).
 
 [analysis/merit_order_from_game.py](analysis/merit_order_from_game.py) rebuilds the merit order with pandas and
 matplotlib and compares the students' bids with the competitive (bid = marginal cost) outcome:
@@ -114,18 +150,20 @@ That makes a nice exercise: give students the CSV and ask them to write the clea
 | File | Purpose |
 |---|---|
 | `index.html` | Landing page: join with a code, or host |
-| `host.html`, `js/host.js` | Instructor view: setup, round control, market clearing, results, debrief |
-| `play.html`, `js/play.js` | Student view: plant(s), bidding, own results |
-| `js/market.js` | Plant catalogue, fleet generation, **market clearing** (pure functions) |
-| `js/charts.js` | SVG merit-order and debrief charts |
+| `host.html`, `js/host.js` | Instructor: setup, phase control, market clearing, private team monitor |
+| `screen.html`, `js/screen.js` | Projector view (public information only) |
+| `play.html`, `js/play.js` | Student view: shop, fleet, bidding, own results |
+| `js/market.js` | Technology catalogue, availability draw, **market clearing** (pure functions) |
+| `js/views.js`, `js/charts.js`, `js/ui.js` | Shared HTML blocks, SVG charts, helpers (finances, CSV export) |
 | `js/store.js`, `js/config.js` | Firebase / local-storage sync layer and its configuration |
+| `js/loadguard.js` | Shows a message if the app fails to load |
 | `database.rules.json` | Firebase Realtime Database security rules |
 
-Plant technologies, cost ranges and capacities are defined in `TECH` at the top of `js/market.js`. Adjust them to match your lecture.
+The default shop is `DEFAULT_CATALOGUE` in `js/market.js`. It can also be edited per game in the host's setup form.
 
 ## Notes and limitations
 
-* The host's browser runs the market clearing. Keep the host tab open during a round.
+* The host's browser runs the market clearing and the timers. Keep `host.html` open during the game.
 * The database rules are open per game code (no login), which suits a classroom. A determined student could
   edit data with the browser dev tools. For graded use, add Firebase Anonymous Auth and stricter rules.
 * Old games stay in the database. Delete the `games` node in the Firebase console now and then.

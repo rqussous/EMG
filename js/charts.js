@@ -23,7 +23,7 @@ export function meritOrderChart(result, opts = {}) {
   const W = opts.width || 920, H = opts.width ? Math.round(opts.width * 0.62) : 430, m = { l: 64, r: 24, t: 28, b: 48 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   const offers = result.offers || [];
-  const totalCap = offers.reduce((s, o) => s + o.capacity, 0);
+  const totalCap = offers.reduce((s, o) => s + (o.available ?? o.capacity), 0);
   const xMax = Math.max(totalCap, result.demand, opts.forecast || 0) * 1.03 || 1;
 
   // Keep the interesting part of the curve readable: very high bids are clipped
@@ -47,21 +47,21 @@ export function meritOrderChart(result, opts = {}) {
     parts.push(`<text class="ax" x="${X(t)}" y="${m.t + ih + 18}" text-anchor="middle">${num(t)}</text>`);
   }
   parts.push(`<line class="axis" x1="${m.l}" x2="${m.l + iw}" y1="${Y(0)}" y2="${Y(0)}"/>`);
-  parts.push(`<text class="ax lbl" x="${m.l + iw / 2}" y="${H - 8}" text-anchor="middle">Cumulative capacity (MW)</text>`);
+  parts.push(`<text class="ax lbl" x="${m.l + iw / 2}" y="${H - 8}" text-anchor="middle">Cumulative available capacity (MW)</text>`);
   parts.push(`<text class="ax lbl" transform="translate(16 ${m.t + ih / 2}) rotate(-90)" text-anchor="middle">Bid price (€/MWh)</text>`);
 
   // bars
   let cum = 0;
   for (const o of offers) {
-    const x0 = X(cum), x1 = X(cum + o.capacity), xd = X(cum + o.dispatched);
-    cum += o.capacity;
+    const x0 = X(cum), x1 = X(cum + (o.available ?? o.capacity)), xd = X(cum + o.dispatched);
+    cum += o.available ?? o.capacity;
     const y0 = Y(0), yb = Y(o.bid);
     const top = Math.min(y0, yb), h = Math.max(1.5, Math.abs(y0 - yb));
     const color = TECH[o.tech].color;
     const owner = opts.names?.[o.owner] ?? o.owner;
     const mine = opts.highlight && o.owner === opts.highlight;
     const tip = `<b>${esc(o.name)}</b> · ${esc(TECH[o.tech].label)}<br>${opts.showNames !== false || mine ? `Owner: ${esc(owner)}<br>` : ''}`
-      + `Capacity ${num(o.capacity)} MW · dispatched ${num(o.dispatched)} MW<br>`
+      + `Available ${num(o.available ?? o.capacity)} of ${num(o.capacity)} MW · dispatched ${num(o.dispatched)} MW<br>`
       + `Bid ${price(o.bid)}${o.auto ? ' (auto)' : ''} · marginal cost ${price(o.mc)}<br>Profit ${eur(o.profit)}`;
     parts.push(`<g data-tip="${esc(tip)}">`);
     parts.push(`<rect class="bar" x="${x0}" y="${top}" width="${Math.max(0, x1 - x0)}" height="${h}" fill="${color}" fill-opacity="0.28"/>`);
@@ -143,4 +143,35 @@ export function markupByRoundChart(rows) {
   parts.push(`<text class="note" x="${X(rows.length - 1)}" y="${Y(last.median) - 10}" text-anchor="end">${price(last.median)}</text>`);
   parts.push(`<text class="ax lbl" x="${m.l + iw / 2}" y="${H - 8}" text-anchor="middle">Round</text>`);
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Median mark-up per round">${parts.join('')}</svg>`;
+}
+
+/** Horizontal stacked bars: installed capacity per player/team, split by technology. */
+export function capacityMixChart(rows) {
+  if (!rows.length) return '<p class="muted">No plants yet.</p>';
+  const W = 920, barH = 22, gap = 10, m = { l: 140, r: 70, t: 8, b: 34 };
+  const H = m.t + m.b + rows.length * (barH + gap);
+  const iw = W - m.l - m.r;
+  const max = Math.max(1, ...rows.map((r) => Object.values(r.byTech).reduce((s, v) => s + v, 0)));
+  const X = (v) => m.l + (v / max) * iw;
+  const parts = [];
+  for (const t of ticks(0, max, 6)) {
+    parts.push(`<line class="grid" x1="${X(t)}" x2="${X(t)}" y1="${m.t}" y2="${H - m.b}"/><text class="ax" x="${X(t)}" y="${H - m.b + 16}" text-anchor="middle">${num(t)}</text>`);
+  }
+  parts.push(`<text class="ax lbl" x="${m.l + iw / 2}" y="${H - 4}" text-anchor="middle">Installed capacity (MW)</text>`);
+  rows.forEach((r, i) => {
+    const y = m.t + i * (barH + gap);
+    parts.push(`<text class="ax" x="${m.l - 8}" y="${y + barH / 2 + 4}" text-anchor="end">${esc(r.name.length > 18 ? r.name.slice(0, 17) + '…' : r.name)}</text>`);
+    let cum = 0;
+    for (const t of TECH_ORDER) {
+      const v = r.byTech[t];
+      if (!v) continue;
+      const tip = `<b>${esc(r.name)}</b><br>${esc(TECH[t].label)}: ${num(v)} MW`;
+      parts.push(`<rect class="bar" data-tip="${esc(tip)}" x="${X(cum)}" y="${y}" width="${X(cum + v) - X(cum)}" height="${barH}" fill="${TECH[t].color}"/>`);
+      cum += v;
+    }
+    parts.push(`<text class="note" x="${X(cum) + 6}" y="${y + barH / 2 + 4}">${num(cum)} MW</text>`);
+  });
+  const used = TECH_ORDER.filter((t) => rows.some((r) => r.byTech[t]));
+  const legend = `<div class="legend">${used.map((t) => `<span><i style="background:${TECH[t].color}"></i>${esc(TECH[t].label)}</span>`).join('')}</div>`;
+  return `${legend}<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Installed capacity by player and technology">${parts.join('')}</svg>`;
 }

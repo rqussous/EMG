@@ -1,10 +1,10 @@
 import { getStore, mode, randomId } from './store.js';
-import { TECH } from './market.js';
+import { TECH, TECH_ORDER } from './market.js';
 import { meritOrderChart } from './charts.js';
 import {
-  $, esc, num, eur, price, roundKey, values, plantsOf, totalCapacity, ownerName,
-  leaderboardTable, standings, attachTooltips,
+  $, esc, num, eur, price, roundKey, values, plantsOf, ownerName, leaderboardTable, attachTooltips, finances, cleared, countdown,
 } from './ui.js';
+import { catalogueTable, demandOutlook, marketMix, availabilityKpis } from './views.js';
 
 const store = await getStore();
 const app = $('#app');
@@ -28,6 +28,17 @@ store.subscribe(gamePath, (g) => {
   render();
 });
 setInterval(tick, 500);
+
+// Buy / sell buttons (event delegation, so re-rendering doesn't lose handlers).
+app.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-buy],[data-sell]');
+  if (!b || b.disabled) return;
+  b.disabled = true;
+  try {
+    if (b.dataset.buy) await buy(b.dataset.buy);
+    else await sell(b.dataset.sell);
+  } finally { b.disabled = false; }
+});
 
 // ---------------------------------------------------------------------------
 function renderJoin() {
@@ -66,66 +77,148 @@ function renderJoin() {
 }
 
 // ---------------------------------------------------------------------------
+const myFin = () => finances(game).find((f) => f.id === me.owner)
+  || { cash: game.config.budget, netWorth: game.config.budget, invested: 0, opProfit: 0, fleetMW: 0, rank: '–', rounds: {} };
+
+async function buy(tech) {
+  const { phase, round } = game.meta;
+  const k = game.config.catalogue[tech];
+  if (phase !== 'invest' || !k?.enabled) return;
+  if (myFin().cash < k.cost) { flash('Not enough cash for this plant.'); return; }
+  const id = `p${randomId(8)}`;
+  const n = plantsOf(game, me.owner).filter((p) => p.tech === tech).length + 1;
+  await store.update(gamePath, {
+    [`plants/${id}`]: {
+      id, owner: me.owner, tech, capacity: k.unit, mc: k.mc, cost: k.cost, round,
+      name: `${TECH[tech].short} ${n}`, boughtBy: me.name, boughtAt: Date.now(),
+    },
+  });
+}
+
+async function sell(id) {
+  const p = game.plants?.[id];
+  if (!p || p.owner !== me.owner || p.round !== game.meta.round || game.meta.phase !== 'invest') return;
+  await store.update(gamePath, { [`plants/${id}`]: null });
+}
+
+function flash(msg) {
+  const el = $('#flash');
+  if (el) { el.textContent = msg; setTimeout(() => { el.textContent = ''; }, 3000); }
+}
+
+// ---------------------------------------------------------------------------
 function render() {
   const { phase, round } = game.meta;
   const team = game.config.mode === 'team';
   $('#hdr-me').textContent = team ? `${me.name} · ${ownerName(game, me.owner)}` : me.name;
   const plants = plantsOf(game, me.owner);
+  // The bid form is only rebuilt when the phase or the fleet changes, so typed bids survive updates.
   const key = `${phase}|${round}|${plants.map((p) => p.id).join(',')}`;
   if (key !== formKey) {
     formKey = key;
-    app.innerHTML = `<div id="top"></div><div id="form"></div><div id="bottom"></div>`;
-    renderForm(plants);
+    app.innerHTML = '<div id="top"></div><div id="main"></div><div id="bottom"></div>';
+    if (phase === 'bidding') renderBidForm(plants);
   }
-  renderTop(plants);
+  renderTop();
+  if (phase !== 'bidding') renderMain(plants);
   renderBottom(plants);
+  tick();
 }
 
 function rulesBox() {
   const c = game.config;
-  return `<details class="card"><summary><b>How the market works</b></summary>
+  return `<details class="card"><summary><b>How the game works</b></summary>
     <ul>
-      <li>Every round is one hour of the day-ahead electricity market. Demand is fixed: consumers buy the forecast amount (±${c.uncertainty}%) whatever the price.</li>
-      <li>For each plant you submit a <b>price (€/MWh)</b> at which you are willing to sell its full capacity. Bids range from ${c.minBid} to ${num(c.priceCap)} €/MWh.</li>
-      <li>The market operator sorts all offers from cheapest to most expensive and accepts them until demand is covered.</li>
+      <li>Your ${c.mode === 'team' ? 'team starts' : 'start'} with <b>${eur(c.budget)}</b>. Each round has two steps:
+        first you can <b>buy power plants</b> from the shop, then you <b>bid</b> their electricity into the market.</li>
+      <li>Plants stay in your fleet for the rest of the game. One round represents <b>${num(c.hours)} hours</b> with the same conditions.</li>
+      <li>Demand is fixed: consumers buy the forecast amount (±${c.uncertainty}%) whatever the price.</li>
+      <li>For each plant you submit a <b>price (€/MWh)</b> at which you are willing to sell its available capacity (${c.minBid} to ${num(c.priceCap)} €/MWh).
+        Wind and solar can only produce part of their capacity, depending on the weather that round.</li>
+      <li>All offers are sorted from cheapest to most expensive and accepted until demand is covered.</li>
       ${c.pricing === 'pab'
         ? '<li><b>Pay-as-bid:</b> every accepted plant is paid <i>its own bid</i>.</li>'
         : '<li><b>Pay-as-clear:</b> the most expensive accepted offer sets the <i>clearing price</i>, and every accepted plant is paid that same price.</li>'}
       <li>If offers cannot cover demand, the price goes to the price cap of ${num(c.priceCap)} €/MWh.</li>
-      <li>Your profit = (price received − marginal cost) × MWh produced. Plants that are not accepted produce nothing and earn nothing.</li>
-      ${c.missing === 'withhold' ? '<li>If you don\'t submit a bid in time, your plant is not offered.</li>' : ''}
-      <li>The player or team with the highest total profit after ${c.rounds} rounds wins.</li>
+      <li>Operating profit = (price received − marginal cost) × MWh produced. Plants that are not accepted earn nothing.</li>
+      ${c.missing === 'withhold' ? '<li>Plants without a bid are not offered.</li>' : ''}
+      <li>Ranking: <b>net worth</b> = cash + your plants valued at ${c.salvage}% of what you paid for them.</li>
     </ul></details>`;
 }
 
-function plantCard(p, bidInput = '') {
+function renderTop() {
+  const { phase, round } = game.meta;
+  const f = myFin();
+  const c = game.config;
+  const rd = game.rounds?.[roundKey(round)] || {};
+  const kpis = phase === 'lobby' ? '' : `<div class="kpis" style="margin-top:1rem">
+    <div class="kpi"><div class="v ${f.cash < 0 ? 'neg' : ''}">${eur(f.cash)}</div><div class="k">cash</div></div>
+    <div class="kpi"><div class="v">${num(f.fleetMW)} MW</div><div class="k">your capacity</div></div>
+    <div class="kpi"><div class="v">${eur(f.netWorth)}</div><div class="k">net worth${cleared(game).length ? ` · rank ${f.rank} / ${finances(game).length}` : ''}</div></div></div>`;
+  let banner = '';
+  if (phase === 'invest') {
+    banner = `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Round ${round} of ${c.rounds}: buy power plants</h2><span class="timer" id="timer"></span></div>
+      <div class="kpis" style="margin-top:.75rem"><div class="kpi"><div class="v">${num(rd.forecast)} MW</div><div class="k">demand forecast this round</div></div></div></div>`;
+  } else if (phase === 'bidding') {
+    banner = `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Round ${round} of ${c.rounds}: bidding is open</h2><span class="timer" id="timer"></span></div>
+      <div class="kpis" style="margin-top:.75rem">
+        <div class="kpi"><div class="v">${num(rd.forecast)} MW</div><div class="k">demand forecast (±${c.uncertainty}%)</div></div>
+        <div class="kpi"><div class="v">${num(values(game.plants).reduce((s, p) => s + p.capacity * (rd.avail?.[p.tech] ?? 1), 0))} MW</div><div class="k">available capacity in the market</div></div>
+        ${availabilityKpis(rd, game)}</div></div>`;
+  }
+  $('#top').innerHTML = kpis + banner;
+}
+
+function plantRow(p, extra = '') {
   const t = TECH[p.tech];
   return `<div class="plant">
     <div class="icon" style="background:${t.color}22">${t.icon}</div>
-    <div class="pname">${esc(p.name)}</div>
-    <div class="muted"><span class="tech"><i style="background:${t.color};width:10px;height:10px;border-radius:3px;display:inline-block"></i>${esc(t.label)}</span></div>
-    <div class="facts"><span>Capacity <b>${num(p.capacity)} MW</b></span><span>Marginal cost <b>${price(p.mc)}</b></span></div>
-    ${bidInput}</div>`;
+    <div class="pname">${esc(p.name)} <span class="muted small">${esc(t.label)}</span></div>
+    <div class="facts"><span>Capacity <b>${num(p.capacity)} MW</b></span><span>Marginal cost <b>${price(p.mc)}</b></span>${p.round ? `<span class="small">bought in round ${p.round} for ${eur(p.cost)}${game.config.mode === 'team' && p.boughtBy ? ` by ${esc(p.boughtBy)}` : ''}</span>` : ''}</div>
+    ${extra}</div>`;
 }
 
-function renderForm(plants) {
+function renderMain(plants) {
   const { phase, round } = game.meta;
-  const el = $('#form');
-  if (phase === 'lobby') { el.innerHTML = `<div class="card"><h2>You're in, ${esc(me.name)}! 🎉</h2><p class="muted">Waiting for the instructor to start the game and hand out power plants…</p></div>${rulesBox()}`; return; }
-  if (!plants.length) { el.innerHTML = '<div class="card"><p class="muted">Your power plant is being assigned…</p></div>'; return; }
-  if (phase !== 'bidding') {
-    el.innerHTML = phase === 'ready'
-      ? `<div class="card"><h2>Your ${plants.length > 1 ? 'power plants' : 'power plant'}</h2>${plants.map((p) => plantCard(p)).join('')}
-         <p class="muted">The marginal cost is what it costs you to produce one MWh (mainly fuel and CO₂). Bidding opens soon.</p></div>${rulesBox()}`
-      : '';
+  const c = game.config;
+  const el = $('#main');
+  if (phase === 'lobby') {
+    el.innerHTML = `<div class="card"><h2>You're in, ${esc(me.name)}! 🎉</h2><p class="muted">Waiting for the instructor to open the shop…</p></div>
+      <div class="card"><h3>The power plant shop</h3>${catalogueTable(game)}</div>${rulesBox()}`;
     return;
   }
+  if (phase === 'invest') {
+    const cash = myFin().cash;
+    el.innerHTML = `<div class="card"><h2>Shop</h2><p class="small muted">Buy as many plants as you like (and can afford). Plants bought this round can be returned for a full refund until the shop closes.</p>
+      <div class="shop">${TECH_ORDER.filter((t) => c.catalogue[t]?.enabled).map((t) => {
+        const k = c.catalogue[t], T = TECH[t];
+        const [lo, hi] = k.avail;
+        return `<div class="shop-item"><div class="icon" style="background:${T.color}22">${T.icon}</div>
+          <div><div class="strong">${esc(T.label)}</div><div class="small muted">${num(k.unit)} MW · MC ${price(k.mc)}${lo < 1 ? ` · ${Math.round(lo * 100)}–${Math.round(hi * 100)}% available` : ''}</div></div>
+          <button data-buy="${t}" ${cash < k.cost ? 'disabled' : ''}>Buy ${eur(k.cost)}</button></div>`;
+      }).join('')}</div><p id="flash" class="neg small"></p></div>
+      <div class="card"><h2>Your fleet</h2>${plants.map((p) => plantRow(p, p.round === round ? `<div class="bid"><button class="secondary" data-sell="${p.id}">Return (+${eur(p.cost)})</button></div>` : '')).join('') || '<p class="muted">No plants yet. Buy some in the shop above!</p>'}</div>
+      <div class="card"><h3>Installed capacity in the market (all players)</h3>${marketMix(game)}<h3 style="margin-top:1rem">Demand outlook</h3>${demandOutlook(game)}</div>${rulesBox()}`;
+    return;
+  }
+  el.innerHTML = '';
+}
+
+function renderBidForm(plants) {
+  const { round } = game.meta;
   const c = game.config;
-  const prev = game.rounds?.[roundKey(round)]?.bids?.[me.owner] || {};
-  el.innerHTML = `<form class="card" id="bidform"><h2>Your bid for round ${round}</h2>
-    ${plants.map((p) => plantCard(p, `<div class="bid"><label for="b_${p.id}" style="margin:0">Offer price</label>
-      <input id="b_${p.id}" data-plant="${p.id}" type="number" inputmode="decimal" step="0.1" min="${c.minBid}" max="${c.priceCap}" value="${prev[p.id] ?? ''}" placeholder="€/MWh"><span class="muted">€/MWh</span></div>`)).join('')}
-    <div class="row"><button class="big" type="submit">Submit bid</button><span id="bidmsg" class="small"></span></div></form>${rulesBox()}`;
+  const rd = game.rounds?.[roundKey(round)] || {};
+  const prev = rd.bids?.[me.owner] || {};
+  const el = $('#main');
+  if (!plants.length) { el.innerHTML = `<div class="card"><h2>No plants to bid</h2><p class="muted">You didn't buy any power plants, so you sit this round out. You can buy plants in the next round.</p></div>${rulesBox()}`; return; }
+  el.innerHTML = `<form class="card" id="bidform"><h2>Your bids for round ${round}</h2>
+    ${plants.map((p) => {
+      const a = rd.avail?.[p.tech] ?? 1;
+      return plantRow(p, `<div class="bid"><label for="b_${p.id}" style="margin:0">Offer price</label>
+        <input id="b_${p.id}" data-plant="${p.id}" type="number" inputmode="decimal" step="0.1" min="${c.minBid}" max="${c.priceCap}" value="${prev[p.id] ?? ''}" placeholder="€/MWh"><span class="muted">€/MWh</span>
+        ${a < 1 ? `<span class="small muted">available this round: ${num(p.capacity * a)} MW (${Math.round(a * 100)}%)</span>` : ''}</div>`);
+    }).join('')}
+    <div class="row"><button class="big" type="submit">Submit bids</button><span id="bidmsg" class="small"></span></div></form>${rulesBox()}`;
   $('#bidform').onsubmit = async (e) => {
     e.preventDefault();
     if (game.meta.phase !== 'bidding' || game.meta.round !== round) return;
@@ -149,108 +242,74 @@ function renderForm(plants) {
   };
 }
 
-function myHeader() {
-  const list = standings(game);
-  const row = list.find((r) => r.id === me.owner);
-  if (!row || !lastCleared()) return '';
-  return `<div class="kpis" style="margin-top:1rem">
-    <div class="kpi"><div class="v ${row.profit < 0 ? 'neg' : ''}">${eur(row.profit)}</div><div class="k">total profit</div></div>
-    <div class="kpi"><div class="v">${row.rank} / ${list.length}</div><div class="k">rank</div></div></div>`;
-}
-
-function renderTop(plants) {
+function renderBottom() {
   const { phase, round } = game.meta;
-  const el = $('#top');
-  if (phase === 'bidding') {
-    const rd = game.rounds?.[roundKey(round)] || {};
-    el.innerHTML = `${myHeader()}<div class="card"><div class="row" style="justify-content:space-between">
-        <h2 style="margin:0">Round ${round} of ${game.config.rounds}: bidding is open</h2><span class="timer" id="timer"></span></div>
-      <div class="kpis" style="margin-top:.75rem">
-        <div class="kpi"><div class="v">${num(rd.forecast)} MW</div><div class="k">demand forecast (±${game.config.uncertainty}%)</div></div>
-        <div class="kpi"><div class="v">${num(totalCapacity(game))} MW</div><div class="k">total capacity in the market</div></div>
-        <div class="kpi"><div class="v">${Object.keys(game.rounds?.[roundKey(round)]?.bids || {}).length} / ${new Set(values(game.plants).map((p) => p.owner)).size}</div><div class="k">bids submitted</div></div>
-      </div></div>`;
-  } else {
-    el.innerHTML = myHeader();
-  }
-  tick();
-}
-
-function renderBottom(plants) {
-  const { phase, round } = game.meta;
-  const el = $('#bottom');
   const parts = [];
   if (phase === 'bidding') {
-    const sub = game.rounds?.[roundKey(round)]?.submittedBy?.[me.owner];
+    const rd = game.rounds?.[roundKey(round)] || {};
+    const sub = rd.submittedBy?.[me.owner];
     const msg = $('#bidmsg');
     if (msg && sub) msg.innerHTML = `<span class="pill ok">✓ Submitted${game.config.mode === 'team' ? ` by ${esc(sub.name)}` : ''}</span> <span class="muted">You can still change it until bidding closes.</span>`;
     if (msg && !sub && !msg.querySelector('.neg')) msg.innerHTML = '<span class="muted">Not submitted yet.</span>';
     // Show a teammate's submitted bid in every field this player hasn't edited.
-    const current = game.rounds?.[roundKey(round)]?.bids?.[me.owner] || {};
+    const current = rd.bids?.[me.owner] || {};
     document.querySelectorAll('#bidform input[data-plant]').forEach((inp) => {
       inp.oninput = () => { inp.dataset.dirty = '1'; };
       if (!inp.dataset.dirty && current[inp.dataset.plant] != null) inp.value = current[inp.dataset.plant];
     });
   }
-  const showRound = phase === 'results' ? round : phase === 'finished' ? lastCleared() : 0;
+  const done = cleared(game);
+  const showRound = phase === 'results' ? round : phase === 'finished' ? done[done.length - 1] : 0;
   if (phase === 'finished') {
-    const row = standings(game).find((r) => r.id === me.owner);
-    parts.push(`<div class="card"><h2>Game over! ${row?.rank === 1 ? '🏆 You won!' : ''}</h2><p>You finished <b>#${row?.rank ?? '–'}</b> with a total profit of <b>${eur(row?.profit ?? 0)}</b>. Look at the projector for the debrief.</p></div>`);
+    const f = myFin();
+    parts.push(`<div class="card"><h2>Game over! ${f.rank === 1 ? '🏆 You won!' : ''}</h2><p>You finished <b>#${f.rank}</b> with a net worth of <b>${eur(f.netWorth)}</b>. Look at the projector for the debrief.</p></div>`);
   }
-  if (showRound) parts.push(roundResult(showRound, plants));
-  if (phase === 'results' || phase === 'finished' || (phase === 'bidding' && round > 1)) {
+  if (showRound) parts.push(roundResult(showRound));
+  if (done.length && phase !== 'lobby') {
     parts.push(historyCard());
     parts.push(`<div class="card"><h2>Leaderboard</h2><div class="scroll">${leaderboardTable(game, me.owner)}</div></div>`);
   }
-  el.innerHTML = parts.join('');
+  $('#bottom').innerHTML = parts.join('');
 }
 
-function lastCleared() {
-  for (let r = game.meta.round; r >= 1; r--) if (game.rounds?.[roundKey(r)]?.result) return r;
-  return 0;
-}
-
-function roundResult(r, plants) {
+function roundResult(r) {
   const rd = game.rounds?.[roundKey(r)];
   const res = rd?.result;
   if (!res) return '<div class="card"><p class="muted">Clearing the market…</p></div>';
   const mine = [...(res.offers || []), ...(res.notOffered || [])].filter((o) => o.owner === me.owner);
-  const tot = res.perOwner?.[me.owner] || { profit: 0, revenue: 0, cost: 0 };
+  const tot = res.perOwner?.[me.owner] || { profit: 0 };
   const names = Object.fromEntries(Object.keys(game.participants || {}).map((id) => [id, ownerName(game, id)]));
   return `<div class="card"><h2>Round ${r} result</h2>
     <div class="kpis">
-      <div class="kpi"><div class="v ${tot.profit < 0 ? 'neg' : tot.profit > 0 ? 'pos' : ''}">${eur(tot.profit)}</div><div class="k">your profit this round</div></div>
+      <div class="kpi"><div class="v ${tot.profit < 0 ? 'neg' : tot.profit > 0 ? 'pos' : ''}">${eur(tot.profit)}</div><div class="k">your operating profit this round</div></div>
       <div class="kpi"><div class="v">${price(res.price)}</div><div class="k">clearing price</div></div>
       <div class="kpi"><div class="v">${num(res.demand)} MW</div><div class="k">actual demand (forecast ${num(rd.forecast)})</div></div>
     </div>
-    <div class="scroll" style="margin-top:.75rem"><table class="tbl"><thead><tr><th>Plant</th><th class="n">Your bid</th><th class="n">Marginal cost</th><th class="n">Dispatched</th><th class="n">Revenue</th><th class="n">Cost</th><th class="n">Profit</th></tr></thead><tbody>
+    ${mine.length ? `<div class="scroll" style="margin-top:.75rem"><table class="tbl"><thead><tr><th>Plant</th><th class="n">Your bid</th><th class="n">Marginal cost</th><th class="n">Dispatched</th><th class="n">Revenue</th><th class="n">Cost</th><th class="n">Profit</th></tr></thead><tbody>
       ${mine.map((o) => `<tr><td>${esc(o.name)}</td><td class="n">${o.bid == null ? 'no bid' : price(o.bid)}${o.auto ? ' (auto)' : ''}</td><td class="n">${price(o.mc)}</td>
-        <td class="n">${num(o.dispatched)} / ${num(o.capacity)} MW</td><td class="n">${eur(o.revenue)}</td><td class="n">${eur(o.cost)}</td><td class="n strong ${o.profit < 0 ? 'neg' : ''}">${eur(o.profit)}</td></tr>`).join('')}
-    </tbody></table></div>
+        <td class="n">${num(o.dispatched)} / ${num(o.available ?? o.capacity)} MW</td><td class="n">${eur(o.revenue)}</td><td class="n">${eur(o.cost)}</td><td class="n strong ${o.profit < 0 ? 'neg' : ''}">${eur(o.profit)}</td></tr>`).join('')}
+    </tbody></table></div><p class="small muted">Money = MW × €/MWh × ${num(res.hours ?? 1)} hours.</p>` : ''}
     <h3 style="margin-top:1rem">The merit order</h3>
     ${meritOrderChart(res, { names, highlight: me.owner, forecast: rd.forecast, showNames: game.config.showNames, width: 600 })}</div>`;
 }
 
 function historyCard() {
-  const rows = [];
-  for (let r = 1; r <= game.meta.round; r++) {
-    const rd = game.rounds?.[roundKey(r)];
-    if (!rd?.result) continue;
-    const mine = [...(rd.result.offers || []), ...(rd.result.notOffered || [])].filter((o) => o.owner === me.owner);
-    rows.push(`<tr><td>R${r}</td><td class="n">${num(rd.result.demand)} MW</td><td class="n">${price(rd.result.price)}</td>
-      <td>${mine.map((o) => `${esc(o.name)}: ${o.bid == null ? 'no bid' : num(o.bid, 1)}`).join('<br>')}</td>
-      <td class="n">${num(mine.reduce((s, o) => s + o.dispatched, 0))} MW</td>
-      <td class="n strong ${(rd.result.perOwner?.[me.owner]?.profit ?? 0) < 0 ? 'neg' : ''}">${eur(rd.result.perOwner?.[me.owner]?.profit ?? 0)}</td></tr>`);
-  }
-  if (!rows.length) return '';
-  return `<div class="card"><h2>Your history</h2><div class="scroll"><table class="tbl"><thead><tr><th>Round</th><th class="n">Demand</th><th class="n">Price</th><th>Your bids (€/MWh)</th><th class="n">Dispatched</th><th class="n">Profit</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
+  const f = myFin();
+  const rows = cleared(game).map((r) => {
+    const res = game.rounds[roundKey(r)].result;
+    const bought = plantsOf(game, me.owner).filter((p) => p.round === r);
+    return `<tr><td>R${r}</td><td class="n">${num(res.demand)} MW</td><td class="n">${price(res.price)}</td>
+      <td>${bought.map((p) => esc(p.name)).join(', ') || '<span class="muted">–</span>'}</td><td class="n">${eur(bought.reduce((s, p) => s + p.cost, 0))}</td>
+      <td class="n strong ${(f.rounds[r] ?? 0) < 0 ? 'neg' : ''}">${eur(f.rounds[r] ?? 0)}</td></tr>`;
+  });
+  return `<div class="card"><h2>Your history</h2><div class="scroll"><table class="tbl"><thead><tr><th>Round</th><th class="n">Demand</th><th class="n">Price</th>
+    <th>Bought</th><th class="n">Invested</th><th class="n">Operating profit</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
 }
 
 function tick() {
   const el = $('#timer');
   if (!el) return;
-  if (!game || game.meta.phase !== 'bidding' || !game.meta.deadline) { el.textContent = ''; return; }
-  const left = Math.max(0, Math.ceil((game.meta.deadline - Date.now()) / 1000));
-  el.textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
-  el.classList.toggle('low', left <= 10);
+  const cd = countdown(game);
+  el.textContent = cd ? `⏱ ${cd.text}` : '';
+  el.classList.toggle('low', !!cd && cd.left <= 10);
 }

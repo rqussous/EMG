@@ -125,3 +125,21 @@ button:disabled { opacity: .45; cursor: default; }
   .code { font-size: 1.8rem; }
   .kpi { min-width: 120px; flex: 1; }
 }
+
+/* investment game */
+textarea { font: inherit; width: 100%; padding: .5rem .65rem; border: 1px solid var(--line); border-radius: 8px; }
+.toolbar { margin: 1rem 0 0; }
+.shop { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .6rem; }
+.shop-item { display: grid; grid-template-columns: auto 1fr; gap: .2rem .75rem; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); padding: .7rem; background: #fff; }
+.shop-item .icon { font-size: 1.6rem; width: 2.6rem; height: 2.6rem; border-radius: 10px; display: grid; place-items: center; grid-row: span 2; }
+.shop-item button { grid-column: 2; justify-self: start; padding: .4rem .9rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.chip { display: inline-flex; align-items: center; gap: .3rem; background: #efeee9; border-radius: 999px; padding: .1rem .55rem; font-size: .8rem; white-space: nowrap; }
+.chip i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.kpi.small-kpi { min-width: 120px; padding: .5rem .8rem; }
+.kpi.small-kpi .v { font-size: 1.15rem; }
+.tbl tr.group td { border-top: 2px solid var(--line); }
+.projector { font-size: 1.1rem; }
+.projector h1 { font-size: 2rem; }
+.projector .tbl { font-size: 1rem; }
+.projector header .timer { font-size: 1.8rem; }

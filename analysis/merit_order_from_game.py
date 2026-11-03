@@ -20,8 +20,8 @@ TECH_COLORS = {
 def merit_order(df: pd.DataFrame, price_col: str) -> pd.DataFrame:
     """Sort offers by price and add the cumulative capacity (the x-axis of the merit order)."""
     mo = df.dropna(subset=[price_col]).sort_values([price_col, "marginal_cost_eur_mwh"]).copy()
-    mo["cum_end"] = mo["capacity_mw"].cumsum()
-    mo["cum_start"] = mo["cum_end"] - mo["capacity_mw"]
+    mo["cum_end"] = mo["available_mw"].cumsum()
+    mo["cum_start"] = mo["cum_end"] - mo["available_mw"]
     return mo
 
 
@@ -33,7 +33,7 @@ def clearing_price(mo: pd.DataFrame, demand: float, price_col: str) -> float:
 
 def plot(ax, mo, demand, price_col, title):
     for _, o in mo.iterrows():
-        ax.bar(o["cum_start"], o[price_col], width=o["capacity_mw"], align="edge",
+        ax.bar(o["cum_start"], o[price_col], width=o["available_mw"], align="edge",
                color=TECH_COLORS.get(o["technology"], "grey"), edgecolor="white", linewidth=1)
     p = clearing_price(mo, demand, price_col)
     ax.axvline(demand, color="black", lw=2, label=f"Demand {demand:,.0f} MW")
