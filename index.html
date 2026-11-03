@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Merit Order Game</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="wrap narrow">
+    <div class="hero">
+      <h1>⚡ Merit Order Game</h1>
+      <p>You own a power plant. Each round, offer your electricity to the day-ahead market at a price of your choice.
+        The cheapest offers are accepted until demand is met, and the last accepted offer sets the price for everyone.
+        Your goal: make as much profit as possible.</p>
+    </div>
+    <div class="choices">
+      <form class="card" action="play.html" method="get">
+        <h2>Join a game</h2>
+        <label for="game">Game code</label>
+        <input id="game" name="game" required autocomplete="off" placeholder="e.g. KWHX" style="text-transform:uppercase;text-align:center;font-size:1.3rem">
+        <p><button class="big" type="submit">Join</button></p>
+      </form>
+      <div class="card">
+        <h2>Instructor</h2>
+        <p class="muted">Create a game and run the rounds from the projector.</p>
+        <p><a class="btn big secondary" href="host.html">Host a game</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

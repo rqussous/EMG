@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "games": {
+      ".read": false,
+      ".write": false,
+      "$code": {
+        ".read": true,
+        ".write": true,
+        ".validate": "$code.matches(/^[A-Z]{4}$/)"
+      }
+    }
+  }
+}
