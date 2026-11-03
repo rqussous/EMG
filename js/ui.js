@@ -14,6 +14,19 @@ export const eur = (x) => {
   return `${s}€${num(a)}`;
 };
 
+/**
+ * Games created before the investment version have no shop catalogue and can't be played with this code.
+ * Returns an HTML message for such games, or '' if the game is fine.
+ */
+export function outdatedGameMessage(game) {
+  if (game?.config?.catalogue && game.config.budget != null) return '';
+  return `<div class="card"><h2>This game was created with an older version</h2>
+    <p>Game <b>${esc(game?.code ?? '')}</b> has no power plant shop, so it can't be played with the current version.
+    Please ask your instructor for the code of a new game.</p>
+    <p class="small muted">Instructor: create a new game on <a href="host.html" onclick="localStorage.removeItem('mog_host_last')">host.html</a>.
+    If you just updated the site, reload with Ctrl+F5 first so your browser doesn't use old cached files.</p></div>`;
+}
+
 export const roundKey = (r) => `r${r}`;
 export const values = (o) => (o ? Object.values(o) : []);
 

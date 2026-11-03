@@ -1,6 +1,6 @@
 // Projector view: read-only, shows only information every player may see.
 import { getStore } from './store.js';
-import { $, esc, num, eur, roundKey, leaderboardTable, attachTooltips, finances, cleared, countdown } from './ui.js';
+import { $, esc, num, eur, roundKey, leaderboardTable, attachTooltips, finances, cleared, countdown, outdatedGameMessage } from './ui.js';
 import {
   PHASE_LABEL, joinCard, lobbyList, catalogueTable, demandOutlook, marketMix, availabilityKpis, resultsCard, capacityMixCard, debriefView,
 } from './views.js';
@@ -15,6 +15,7 @@ $('#hdr-game').textContent = `Game ${code}`;
 store.subscribe(`games/${code}`, (g) => {
   game = g;
   if (!g) { app.innerHTML = `<div class="card"><h2>Game ${esc(code)} not found</h2></div>`; return; }
+  if (outdatedGameMessage(g)) { app.innerHTML = outdatedGameMessage(g); return; }
   render();
 });
 setInterval(tick, 500);

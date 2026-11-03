@@ -3,6 +3,7 @@ import { TECH, TECH_ORDER } from './market.js';
 import { meritOrderChart } from './charts.js';
 import {
   $, esc, num, eur, price, roundKey, values, plantsOf, ownerName, leaderboardTable, attachTooltips, finances, cleared, countdown,
+  outdatedGameMessage,
 } from './ui.js';
 import { catalogueTable, demandOutlook, marketMix, availabilityKpis } from './views.js';
 
@@ -23,6 +24,7 @@ $('#hdr-game').textContent = `Game ${code}`;
 store.subscribe(gamePath, (g) => {
   game = g;
   if (!g) { app.innerHTML = `<div class="card"><h2>Game “${esc(code)}” not found</h2><p>Check the code with your instructor.</p><p><a href="index.html">Back</a></p></div>`; formKey = ''; return; }
+  if (outdatedGameMessage(g)) { app.innerHTML = outdatedGameMessage(g); formKey = ''; return; }
   const known = me && (g.config.mode === 'team' ? g.members?.[me.id] : g.participants?.[me.id]);
   if (!known) { if (formKey !== 'join') renderJoin(); return; }
   render();

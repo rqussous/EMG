@@ -2,7 +2,7 @@ import { getStore, mode } from './store.js';
 import { TECH, TECH_ORDER, DEFAULT_CATALOGUE, clearMarket, drawAvailability } from './market.js';
 import {
   $, esc, num, eur, price, roundKey, values, plantsOf, ownerName, techBadge, fleetChips, attachTooltips, download,
-  resultsCsv, finances, owners, cleared, defaultDemand, countdown,
+  resultsCsv, finances, owners, cleared, defaultDemand, countdown, outdatedGameMessage,
 } from './ui.js';
 import { PHASE_LABEL, joinCard, lobbyList, resultsCard, capacityMixCard, debriefView, demandOutlook, marketMix } from './views.js';
 
@@ -146,6 +146,11 @@ function start() {
   $('#hdr-game').textContent = `Game ${code}`;
   store.subscribe(gamePath(), (g) => {
     if (!g) { app.innerHTML = `<div class="card"><h2>Game ${esc(code)} not found</h2><p><a href="host.html">Create a new game</a></p></div>`; return; }
+    if (outdatedGameMessage(g)) {
+      localStorage.removeItem('mog_host_last');
+      app.innerHTML = `${outdatedGameMessage(g)}<p><a class="btn" href="host.html">Create a new game</a></p>`;
+      return;
+    }
     game = g;
     render();
   });
