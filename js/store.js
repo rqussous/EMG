@@ -21,7 +21,7 @@ async function firebaseStore() {
     get: async (p) => (await get(ref(db, p))).val(),
     set: (p, v) => set(ref(db, p), v),
     update: (p, obj) => update(ref(db, p), obj),
-    subscribe: (p, cb) => onValue(ref(db, p), (snap) => cb(snap.val())),
+    subscribe: (p, cb) => onValue(ref(db, p), (snap) => cb(snap.val()), (err) => showFatal(err)),
   };
 }
 
@@ -61,6 +61,17 @@ function localStore() {
     },
   };
 }
+
+/** Show an error on the page instead of leaving it on "Loading…". */
+export function showFatal(err) {
+  const msg = String(err?.message || err);
+  const hint = /permission.denied/i.test(msg)
+    ? 'Firebase refused access. Check that the rules from <code>database.rules.json</code> are published in the Realtime Database &rarr; Rules tab.'
+    : 'Check <code>js/config.js</code> (it should contain only the <code>firebaseConfig</code> object) and the browser console (F12).';
+  const app = document.getElementById('app');
+  if (app) app.innerHTML = `<div class="card"><h2>Something went wrong</h2><p class="neg">${msg.replace(/</g, '&lt;')}</p><p>${hint}</p></div>`;
+}
+window.addEventListener('unhandledrejection', (e) => showFatal(e.reason));
 
 export function randomId(len = 10) {
   const a = 'abcdefghijklmnopqrstuvwxyz0123456789';

@@ -31,6 +31,8 @@ Open <http://localhost:8000/host.html>, create a game, then open the join link i
 4. **Project settings (gear icon) → General → Your apps → Web (`</>`)**. Register an app (no hosting needed)
    and copy the `firebaseConfig` object.
 5. Paste it into [js/config.js](js/config.js) in place of `null`. Make sure it contains `databaseURL`.
+   Copy **only the `firebaseConfig = { … }` object**. Don't copy the `import … from "firebase/app"`,
+   `initializeApp` or `getAnalytics` lines from the console snippet: they need a bundler and stop the page from loading.
 
 The free Spark plan (100 simultaneous connections, 1 GB stored) is plenty for a lecture.
 The Firebase web config is not a secret, so it's fine to commit it.
