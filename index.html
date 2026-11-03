@@ -8,23 +8,28 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="wrap narrow">
-    <div class="hero">
-      <h1>⚡ Merit Order Game</h1>
-      <p>You run a power company. Each round, invest your money in power plants, then offer their electricity to the market
-        at a price of your choice. The cheapest offers are accepted until demand is met, and the last accepted offer sets the price for everyone.
+  <header class="top">
+    <span class="brand"><img src="img/logo.svg" alt="" onerror="this.remove()">Merit Order Game <small>Energy System Modelling</small></span>
+  </header>
+  <div class="hero">
+    <div class="inner">
+      <h1>Run a power company</h1>
+      <p>Each round, invest your money in power plants, then offer their electricity to the market at a price of your choice.
+        The cheapest offers are accepted until demand is met, and the last accepted offer sets the price for everyone.
         Your goal: end the game with the highest net worth.</p>
     </div>
+  </div>
+  <div class="wrap narrow">
     <div class="choices">
       <form class="card" action="play.html" method="get">
         <h2>Join a game</h2>
         <label for="game">Game code</label>
-        <input id="game" name="game" required autocomplete="off" placeholder="e.g. KWHX" style="text-transform:uppercase;text-align:center;font-size:1.3rem">
+        <input id="game" name="game" required autocomplete="off" placeholder="e.g. KWHX" style="text-transform:uppercase;font-size:1.3rem;letter-spacing:.2rem">
         <p><button class="big" type="submit">Join</button></p>
       </form>
       <div class="card">
         <h2>Instructor</h2>
-        <p class="muted">Create a game and run the rounds from the projector.</p>
+        <p class="muted">Create a game and run the rounds. The projector view opens from the host page.</p>
         <p><a class="btn big secondary" href="host.html">Host a game</a></p>
       </div>
     </div>

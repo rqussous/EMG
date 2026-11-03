@@ -161,6 +161,19 @@ That makes a nice exercise: give students the CSV and ask them to write the clea
 
 The default shop is `DEFAULT_CATALOGUE` in `js/market.js`. It can also be edited per game in the host's setup form.
 
+## Design
+
+The look follows the [University of Freiburg corporate design](https://cd.uni-freiburg.de/):
+Uni-Blau `#344A9A`, Dunkelblau `#00004A` and Sand backgrounds, flush-left text, rectangular areas and full-bleed colour bands.
+All colours are CSS variables at the top of [css/style.css](css/style.css).
+
+* **Typeface:** the house font *Social* is licensed and not bundled. Pages use it if it's installed on the device,
+  otherwise Arial, the official CD fallback.
+* **Logo:** not included, because the logo policy governs its use (ask Marketing und Events / cd@zv.uni-freiburg.de).
+  If you may use it, save it as `img/logo.svg` and it appears in every page header automatically.
+* **Chart colours:** the power plant technologies keep conventional energy colours (yellow solar, blue wind, …),
+  checked for colour-blind separation. The CD palette doesn't have eight distinguishable colours for data.
+
 ## Notes and limitations
 
 * The host's browser runs the market clearing and the timers. Keep `host.html` open during the game.
