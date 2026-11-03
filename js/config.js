@@ -15,7 +15,6 @@
 //   projectId: "merit-order-game",
 //   appId: "1:1234567890:web:abcdef",
 // };
-export const firebaseConfig = null;
 
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
@@ -25,7 +24,7 @@ import { getAnalytics } from "firebase/analytics";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyC3ZbSkaxJi0NqJgoO266AhlULdlni1POU",
   authDomain: "electricitymarketgame.firebaseapp.com",
   databaseURL: "https://electricitymarketgame-default-rtdb.europe-west1.firebasedatabase.app",
